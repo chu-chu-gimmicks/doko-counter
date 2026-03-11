@@ -11,13 +11,16 @@ namespace ChuChuGimmicks.DokoCounter
         [SerializeField] private GameObject[] colliders;
         [SerializeField] private Board[] boards;
 
-        private const int MAX_COUNT = 100;
-        private const float INTERVAL = 2.0f;
+        private const float UPDATE_INTERVAL_SECONDS = 2.0f;
+        private const int DELAY_FRAMES = 1;
+        private const int MAX_COUNT = 160;
         private const float HEIGHT_OFFSET = 0.1f;
 
         VRCPlayerApi[] players = new VRCPlayerApi[MAX_COUNT];
         private int[] counts = null;
+        private int totalCount = 0;
         private bool isPending = false;
+        private int currentIndex = 0;
 
 
 
@@ -27,6 +30,8 @@ namespace ChuChuGimmicks.DokoCounter
             if (isPending) { return; }
             isPending = true;
 
+            if (!Utilities.IsValid(colliders) || colliders.Length == 0) { return; }
+
             for (int i = 0; i < colliders.Length; i++)
             {
                 if (!Utilities.IsValid(colliders[i])) { continue; }
@@ -35,12 +40,12 @@ namespace ChuChuGimmicks.DokoCounter
                 colliders[i].SetActive(false);
             }
 
-            PrepareBoard();
-            StartCount();
+            InitializeBoard();
+            StartCountCycle();
         }
 
 
-        private void PrepareBoard()
+        private void InitializeBoard()
         {
             for (int i = 0; i < boards.Length; i++)
             {
@@ -50,85 +55,100 @@ namespace ChuChuGimmicks.DokoCounter
         }
 
 
-        private void StartCount()
+        public void StartCountCycle()
         {
-            if (!Utilities.IsValid(counts))
-            {
-                counts = new int[colliders.Length];
-            }
-
-            UpdateCount();
-        }
-
-
-        public void UpdateCount()
-        {
-            if (this.gameObject.activeInHierarchy)
-            {
-                // 次の更新を予約
-                SendCustomEventDelayedSeconds(nameof(UpdateCount), INTERVAL);
-            }
-            else
+            if (!this.gameObject.activeInHierarchy)
             {
                 isPending = false;
                 return;
             }
 
-            // プレイヤーの情報を格納
+            if (!Utilities.IsValid(counts))
+            {
+                counts = new int[colliders.Length];
+            }
+
+            // プレイヤー情報を更新
             VRCPlayerApi.GetPlayers(players);
-            // プレイヤー数を格納
-            int playerCount = VRCPlayerApi.GetPlayerCount();
+            totalCount = VRCPlayerApi.GetPlayerCount();
 
-            for (int i = 0; i < colliders.Length; i++)
+            currentIndex = 0;
+
+            ProcessNextCollider();
+        }
+
+
+        public void ProcessNextCollider()
+        {
+            if (!this.gameObject.activeInHierarchy)
             {
-                if (!Utilities.IsValid(colliders[i]))
+                isPending = false;
+                return;
+            }
+
+            counts[currentIndex] = GetPlayerCountInCollider(currentIndex);
+            currentIndex = (currentIndex + 1) % colliders.Length;
+
+            if (currentIndex > 0)
+            {
+                SendCustomEventDelayedFrames(nameof(ProcessNextCollider), DELAY_FRAMES);
+            }
+            else
+            {
+                UpdateUI();
+                SendCustomEventDelayedSeconds(nameof(StartCountCycle), UPDATE_INTERVAL_SECONDS);
+            }
+        }
+
+
+        private int GetPlayerCountInCollider(int index)
+        {
+            if (!Utilities.IsValid(colliders[index])) { return -1; }
+
+            int count = 0;
+            Transform colliderTransform = colliders[index].transform;
+
+            for (int j = 0; j < totalCount; j++)
+            {
+                if (!Utilities.IsValid(players[j]) || !players[j].IsValid()) { continue; }
+
+                if (IsInCollider(colliderTransform, players[j]))
                 {
-                    counts[i] = -1;
-                    continue;
-                }
-                else
-                {
-                    int count = 0;
-
-                    for (int j = 0; j < playerCount; j++)
-                    {
-                        if (!players[j].IsValid()) { continue; }
-
-                        if (IsInCollider(colliders[i].transform, players[j]))
-                        {
-                            count++;
-                        }
-                    }
-
-                    counts[i] = count;
+                    count++;
                 }
             }
 
-            // UIを更新
-            for (int i = 0; i < boards.Length; i++)
-            {
-                if (!Utilities.IsValid(boards[i])) { continue; }
-                boards[i].UpdateUI(counts, playerCount);
-            }
+            return count;
         }
 
 
         private bool IsInCollider(Transform collider, VRCPlayerApi player)
         {
-            Vector3 colliderPos = collider.position;
+            Vector3 colliderPos    = collider.position;
             Quaternion colliderRot = collider.rotation;
-            Vector3 colliderSize = collider.localScale;
+
+            Vector3 colliderSize   = collider.localScale; // lossyScaleは使わず運用でカバー
 
             Vector3 playerPos = player.GetPosition();
+            playerPos.y += HEIGHT_OFFSET;
 
             // ワールド空間のプレイヤー座標をコライダーのローカル空間に変換
             Vector3 localPlayerPos = Quaternion.Inverse(colliderRot) * (playerPos - colliderPos);
-            //Debug.Log(localPlayerPos);
 
             // ローカル空間でAABBチェック（y座標は少し上を基準に）
             return Mathf.Abs(localPlayerPos.x) <= colliderSize.x / 2 &&
-                   Mathf.Abs(localPlayerPos.y + HEIGHT_OFFSET) <= colliderSize.y / 2 &&
+                   Mathf.Abs(localPlayerPos.y) <= colliderSize.y / 2 &&
                    Mathf.Abs(localPlayerPos.z) <= colliderSize.z / 2;
+        }
+
+
+        private void UpdateUI()
+        {
+            for (int i = 0; i < boards.Length; i++)
+            {
+                if (!Utilities.IsValid(boards[i])) { continue; }
+                boards[i].UpdateUI(counts, totalCount);
+            }
         }
     }
 }

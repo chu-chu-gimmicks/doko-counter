@@ -1,9 +1,10 @@
+
 using UdonSharp;
 using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
 
-namespace ChuChuGimmicks.DokoCounter
+namespace ChuChuGimmicks.DocoCounter
 {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class Manager : UdonSharpBehaviour
@@ -114,7 +115,14 @@ namespace ChuChuGimmicks.DokoCounter
 
                 if (IsInCollider(colliderTransform, players[j]))
                 {
-                    count++;
+                    if (players[j].isLocal)
+                    {
+                        count += 1001;
+                    }
+                    else
+                    {
+                        count++;
+                    }
                 }
             }
 

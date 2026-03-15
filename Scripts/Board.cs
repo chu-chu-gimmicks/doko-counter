@@ -4,14 +4,19 @@ using UnityEngine;
 using VRC.SDKBase;
 using VRC.Udon;
 
-namespace ChuChuGimmicks.DokoCounter
+namespace ChuChuGimmicks.DocoCounter
 {
     [UdonBehaviourSyncMode(BehaviourSyncMode.None)]
     public class Board : UdonSharpBehaviour
     {
+        [SerializeField] private UnityEngine.UI.Image[] icons;
+        [SerializeField] private Sprite[] iconSprites;
+
         [SerializeField] private TMPro.TextMeshProUGUI[] nameTexts;
         [SerializeField] private TMPro.TextMeshProUGUI[] countTexts;
         [SerializeField] private TMPro.TextMeshProUGUI totalCountText;
+
+
 
 
         public void SetName(GameObject[] colliders)
@@ -48,7 +53,15 @@ namespace ChuChuGimmicks.DokoCounter
                 if (i >= 0 && i < counts.Length)
                 {
                     if (!Utilities.IsValid(counts[i])) { continue; }
-                    countTexts[i].text = $"{counts[i]}";
+
+                    bool isLocalPlayerHere = counts[i] >= 1001;
+                    int spriteIdx = isLocalPlayerHere ? 1 : 0;
+                    if (icons[i].sprite != iconSprites[spriteIdx])
+                    {
+                        icons[i].sprite = iconSprites[spriteIdx];
+                    }
+
+                    countTexts[i].text = $"{counts[i] % 1000}";
                 }
                 else
                 {
